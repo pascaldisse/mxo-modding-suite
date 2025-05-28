@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Matrix Online Modding Suite (Standalone)</title>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            background-color: #000800;
+            color: #00ff00;
+            margin: 0;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background-color: #001a00;
+            padding: 20px;
+            border: 1px solid #00ff00;
+            border-radius: 5px;
+        }
+        
+        h1 {
+            text-align: center;
+            border-bottom: 2px solid #00ff00;
+            padding-bottom: 10px;
+            margin-top: 0;
+        }
+        
+        h2 {
+            border-bottom: 1px solid #00ff00;
+            padding-bottom: 5px;
+        }
+        
+        .button {
+            background-color: #001a00;
+            color: #00ff00;
+            border: 1px solid #00ff00;
+            padding: 8px 16px;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin: 5px;
+            display: inline-block;
+        }
+        
+        .button:hover {
+            background-color: #00ff00;
+            color: #000800;
+        }
+        
+        .file-display {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px dashed #00ff00;
+            min-height: 300px;
+        }
+        
+        .file-tree {
+            border: 1px solid #00ff00;
+            padding: 10px;
+            margin-bottom: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .file-item {
+            padding: 3px 10px;
+            cursor: pointer;
+            border-bottom: 1px solid rgba(0, 255, 0, 0.1);
+        }
+        
+        .file-item:hover {
+            background-color: rgba(0, 255, 0, 0.1);
+        }
+        
+        .file-item.folder {
+            font-weight: bold;
+        }
+        
+        .preview {
+            margin-top: 20px;
+            border: 1px solid #00ff00;
+            padding: 10px;
+            min-height: 200px;
+        }
+        
+        .preview canvas, .preview img, .preview video {
+            max-width: 100%;
+            display: block;
+            margin: 0 auto;
+        }
+        
+        .preview audio {
+            width: 100%;
+            margin-top: 10px;
+        }
+        
+        .tabs {
+            display: flex;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #00ff00;
+        }
+        
+        .tab {
+            padding: 5px 10px;
+            cursor: pointer;
+            margin-right: 5px;
+        }
+        
+        .tab.active {
+            background-color: #00ff00;
+            color: #000800;
+            border-top-left-radius: 3px;
+            border-top-right-radius: 3px;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .metadata {
+            font-size: 0.9em;
+            margin-top: 20px;
+            padding: 10px;
+            background-color: rgba(0, 255, 0, 0.1);
+            border-radius: 3px;
+        }
+        
+        .file-info {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: rgba(0, 255, 0, 0.05);
+            border-left: 3px solid #00ff00;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Matrix Online Modding Suite</h1>
+        
+        <div class="file-info">
+            <p>This is a standalone demo of the Matrix Online Modding Suite. For the full application with all features, please use the main <code>index.html</code> file.</p>
+            <p>This demo lets you:</p>
+            <ul>
+                <li>Select and view sample files</li>
+                <li>Preview 3D models, textures, and sounds</li>
+                <li>View file metadata</li>
+            </ul>
+        </div>
+        
+        <h2>File Browser</h2>
+        <div class="file-tree">
+            <div class="file-item folder" onclick="toggleFolder('models')">📁 Models</div>
+            <div id="models" style="display: none; padding-left: 20px;">
+                <div class="file-item" onclick="loadFile('model', 'character.abc')">📊 character.abc</div>
+                <div class="file-item" onclick="loadFile('model', 'weapon.mob')">📊 weapon.mob</div>
+            </div>
+            
+            <div class="file-item folder" onclick="toggleFolder('textures')">📁 Textures</div>
+            <div id="textures" style="display: none; padding-left: 20px;">
+                <div class="file-item" onclick="loadFile('texture', 'diffuse.dtx')">🖼️ diffuse.dtx</div>
+                <div class="file-item" onclick="loadFile('texture', 'normal.dtx')">🖼️ normal.dtx</div>
+            </div>
+            
+            <div class="file-item folder" onclick="toggleFolder('sounds')">📁 Sounds</div>
+            <div id="sounds" style="display: none; padding-left: 20px;">
+                <div class="file-item" onclick="loadFile('sound', 'footstep.wav')">🔊 footstep.wav</div>
+                <div class="file-item" onclick="loadFile('sound', 'dialogue.wav')">🔊 dialogue.wav</div>
+            </div>
+            
+            <div class="file-item folder" onclick="toggleFolder('videos')">📁 Cutscenes</div>
+            <div id="videos" style="display: none; padding-left: 20px;">
+                <div class="file-item" onclick="loadFile('video', 'intro.bik')">🎬 intro.bik</div>
+                <div class="file-item" onclick="loadFile('video', 'ending.bik')">🎬 ending.bik</div>
+            </div>
+            
+            <div class="file-item folder" onclick="toggleFolder('dlls')">📁 Assemblies</div>
+            <div id="dlls" style="display: none; padding-left: 20px;">
+                <div class="file-item" onclick="loadFile('dll', 'client.dll')">⚙️ client.dll</div>
+                <div class="file-item" onclick="loadFile('dll', 'renderer.dll')">⚙️ renderer.dll</div>
+            </div>
+        </div>
+        
+        <h2>File Viewer</h2>
+        <div class="tabs">
+            <div class="tab active" data-tab="preview">Preview</div>
+            <div class="tab" data-tab="info">Information</div>
+            <div class="tab" data-tab="hex">Hex View</div>
+        </div>
+        
+        <div class="tab-content active" id="preview">
+            <div class="file-display" id="file-preview">
+                <p class="centered">Select a file to preview</p>
+            </div>
+        </div>
+        
+        <div class="tab-content" id="info">
+            <div class="file-display" id="file-info">
+                <p class="centered">Select a file to view information</p>
+            </div>
+        </div>
+        
+        <div class="tab-content" id="hex">
+            <div class="file-display" id="file-hex">
+                <p class="centered">Select a file to view hex data</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Toggle folder visibility
+        function toggleFolder(id) {
+            const folder = document.getElementById(id);
+            if (folder.style.display === 'none') {
+                folder.style.display = 'block';
+            } else {
+                folder.style.display = 'none';
+            }
+        }
+        
+        // Tab switching
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', function() {
+                // Remove active class from all tabs
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                
+                // Add active class to clicked tab
+                this.classList.add('active');
+                
+                // Hide all tab content
+                document.querySelectorAll('.tab-content').forEach(content => {
+                    content.classList.remove('active');
+                });
+                
+                // Show content for active tab
+                const tabId = this.getAttribute('data-tab');
+                document.getElementById(tabId).classList.add('active');
+            });
+        });
+        
+        // Load file function
+        function loadFile(type, name) {
+            let previewHtml = '';
+            let infoHtml = '';
+            let hexHtml = '';
+            
+            // Sample file data
+            const fileData = {
+                size: Math.floor(Math.random() * 1000000) + 1000,
+                lastModified: new Date().toLocaleString(),
+                type: type
+            };
+            
+            // Sample hex data
+            const hexData = generateHexData();
+            
+            // Generate preview based on file type
+            switch (type) {
+                case 'model':
+                    previewHtml = `
+                        <h3>3D Model: ${name}</h3>
+                        <div style="background-color: #001a00; width: 100%; height: 300px; position: relative; overflow: hidden;">
+                            <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 20px;">
+                                3D Model Viewer
+                            </div>
+                            <div style="position: absolute; bottom: 10px; left: 10px; font-size: 12px;">
+                                [Interactive 3D viewer available in full version]
+                            </div>
+                        </div>
+                        <div class="metadata">
+                            <p><strong>Format:</strong> ${name.endsWith('.abc') ? 'Lithtech ABC' : 'Matrix Online MOB'}</p>
+                            <p><strong>Vertices:</strong> ${Math.floor(Math.random() * 10000) + 1000}</p>
+                            <p><strong>Triangles:</strong> ${Math.floor(Math.random() * 5000) + 500}</p>
+                            <p><strong>Animations:</strong> ${Math.floor(Math.random() * 10) + 1}</p>
+                        </div>
+                    `;
+                    break;
+                case 'texture':
+                    previewHtml = `
+                        <h3>Texture: ${name}</h3>
+                        <div style="background-color: #001a00; width: 100%; height: 300px; display: flex; align-items: center; justify-content: center;">
+                            <div style="width: 256px; height: 256px; background: linear-gradient(45deg, #00ff00, #001a00); border: 1px solid #00ff00;"></div>
+                        </div>
+                        <div class="metadata">
+                            <p><strong>Format:</strong> DTX</p>
+                            <p><strong>Dimensions:</strong> 256 x 256</p>
+                            <p><strong>Channels:</strong> RGBA</p>
+                            <p><strong>Mipmaps:</strong> 8</p>
+                        </div>
+                    `;
+                    break;
+                case 'sound':
+                    previewHtml = `
+                        <h3>Sound: ${name}</h3>
+                        <div style="background-color: #001a00; width: 100%; height: 100px; display: flex; align-items: center; justify-content: center;">
+                            <div style="width: 90%; height: 50px; position: relative;">
+                                <div style="position: absolute; top: 0; left: 0; right: 0; height: 100%;">
+                                    ${generateWaveform()}
+                                </div>
+                            </div>
+                        </div>
+                        <div style="text-align: center; margin-top: 10px;">
+                            <button class="button">Play</button>
+                            <button class="button">Pause</button>
+                        </div>
+                        <div class="metadata">
+                            <p><strong>Format:</strong> WAV</p>
+                            <p><strong>Duration:</strong> ${Math.floor(Math.random() * 60) + 1} seconds</p>
+                            <p><strong>Sample Rate:</strong> 44100 Hz</p>
+                            <p><strong>Channels:</strong> Stereo</p>
+                        </div>
+                    `;
+                    break;
+                case 'video':
+                    previewHtml = `
+                        <h3>Cutscene: ${name}</h3>
+                        <div style="background-color: #000; width: 100%; height: 300px; position: relative; overflow: hidden;">
+                            <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 20px;">
+                                Video Player
+                            </div>
+                            <div style="position: absolute; bottom: 10px; left: 0; right: 0; height: 30px; background-color: rgba(0,0,0,0.5); display: flex; align-items: center; padding: 0 10px;">
+                                <div style="flex-grow: 1; height: 4px; background-color: #001a00; position: relative;">
+                                    <div style="position: absolute; top: 0; left: 0; width: 30%; height: 100%; background-color: #00ff00;"></div>
+                                </div>
+                                <div style="margin-left: 10px;">0:30 / 1:45</div>
+                            </div>
+                        </div>
+                        <div style="text-align: center; margin-top: 10px;">
+                            <button class="button">Play</button>
+                            <button class="button">Pause</button>
+                            <button class="button">Extract Frames</button>
+                        </div>
+                        <div class="metadata">
+                            <p><strong>Format:</strong> Bink Video</p>
+                            <p><strong>Resolution:</strong> 640 x 480</p>
+                            <p><strong>Duration:</strong> 1:45</p>
+                            <p><strong>Framerate:</strong> 30fps</p>
+                        </div>
+                    `;
+                    break;
+                case 'dll':
+                    previewHtml = `
+                        <h3>Assembly: ${name}</h3>
+                        <div style="background-color: #001a00; width: 100%; padding: 15px; font-family: monospace; height: 300px; overflow-y: auto;">
+                            <div style="color: #888;"># Decompiled code from ${name}</div>
+                            <div style="color: #888;"># Dynamic Link Library</div>
+                            <div style="color: #888;"># This is a sample decompilation</div>
+                            <div>&nbsp;</div>
+                            <div style="color: #00aa00;">// Imported libraries</div>
+                            <div>#include &lt;kernel32.dll&gt;</div>
+                            <div>#include &lt;user32.dll&gt;</div>
+                            <div>#include &lt;gdi32.dll&gt;</div>
+                            <div>&nbsp;</div>
+                            <div style="color: #00aa00;">// Exported functions</div>
+                            <div>&nbsp;</div>
+                            <div>DWORD WINAPI Initialize(LPVOID lpParam) {</div>
+                            <div>&nbsp;&nbsp;&nbsp;&nbsp;// Initialize component</div>
+                            <div>&nbsp;&nbsp;&nbsp;&nbsp;if (!InitializeInternalStructures()) {</div>
+                            <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;return ERROR_INITIALIZATION_FAILED;</div>
+                            <div>&nbsp;&nbsp;&nbsp;&nbsp;}</div>
+                            <div>&nbsp;</div>
+                            <div>&nbsp;&nbsp;&nbsp;&nbsp;// Register with system</div>
+                            <div>&nbsp;&nbsp;&nbsp;&nbsp;HANDLE hSystem = RegisterSystemCallback(OnSystemEvent);</div>
+                            <div>&nbsp;&nbsp;&nbsp;&nbsp;if (hSystem == INVALID_HANDLE_VALUE) {</div>
+                            <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;return GetLastError();</div>
+                            <div>&nbsp;&nbsp;&nbsp;&nbsp;}</div>
+                            <div>&nbsp;</div>
+                            <div>&nbsp;&nbsp;&nbsp;&nbsp;g_IsInitialized = TRUE;</div>
+                            <div>&nbsp;&nbsp;&nbsp;&nbsp;return ERROR_SUCCESS;</div>
+                            <div>}</div>
+                        </div>
+                        <div style="text-align: center; margin-top: 10px;">
+                            <button class="button">View Exports</button>
+                            <button class="button">View Imports</button>
+                            <button class="button">View Sections</button>
+                        </div>
+                        <div class="metadata">
+                            <p><strong>Format:</strong> PE32 Executable</p>
+                            <p><strong>Architecture:</strong> x86</p>
+                            <p><strong>Exports:</strong> 12 functions</p>
+                            <p><strong>Sections:</strong> .text, .data, .rdata, .rsrc</p>
+                        </div>
+                    `;
+                    break;
+                default:
+                    previewHtml = `<p>No preview available for ${name}</p>`;
+            }
+            
+            // Generate info tab content
+            infoHtml = `
+                <h3>File Information: ${name}</h3>
+                <table style="width: 100%; border-collapse: collapse;">
+                    <tr>
+                        <td style="padding: 8px; border-bottom: 1px solid rgba(0, 255, 0, 0.2);">Filename:</td>
+                        <td style="padding: 8px; border-bottom: 1px solid rgba(0, 255, 0, 0.2);">${name}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; border-bottom: 1px solid rgba(0, 255, 0, 0.2);">Size:</td>
+                        <td style="padding: 8px; border-bottom: 1px solid rgba(0, 255, 0, 0.2);">${fileData.size} bytes</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; border-bottom: 1px solid rgba(0, 255, 0, 0.2);">Type:</td>
+                        <td style="padding: 8px; border-bottom: 1px solid rgba(0, 255, 0, 0.2);">${fileData.type}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; border-bottom: 1px solid rgba(0, 255, 0, 0.2);">Last Modified:</td>
+                        <td style="padding: 8px; border-bottom: 1px solid rgba(0, 255, 0, 0.2);">${fileData.lastModified}</td>
+                    </tr>
+                </table>
+                
+                <div class="file-info">
+                    <h4>Matrix Online File Format</h4>
+                    <p>
+                        ${getFormatDescription(type, name)}
+                    </p>
+                </div>
+            `;
+            
+            // Generate hex tab content
+            hexHtml = `
+                <h3>Hex View: ${name}</h3>
+                <div style="font-family: monospace; background-color: #001a00; padding: 10px; height: 300px; overflow-y: auto;">
+                    ${hexData}
+                </div>
+            `;
+            
+            // Update the display
+            document.getElementById('file-preview').innerHTML = previewHtml;
+            document.getElementById('file-info').innerHTML = infoHtml;
+            document.getElementById('file-hex').innerHTML = hexHtml;
+        }
+        
+        // Helper function to generate hex view
+        function generateHexData() {
+            let hexOutput = '';
+            const bytesPerRow = 16;
+            const rows = 20;
+            
+            for (let row = 0; row < rows; row++) {
+                // Address column
+                hexOutput += `<div>${(row * bytesPerRow).toString(16).padStart(8, '0')}: `;
+                
+                // Hex columns
+                for (let i = 0; i < bytesPerRow; i++) {
+                    const byte = Math.floor(Math.random() * 256);
+                    hexOutput += byte.toString(16).padStart(2, '0') + ' ';
+                    
+                    // Add extra space in the middle
+                    if (i === 7) {
+                        hexOutput += ' ';
+                    }
+                }
+                
+                hexOutput += ' ';
+                
+                // ASCII column
+                for (let i = 0; i < bytesPerRow; i++) {
+                    const byte = Math.floor(Math.random() * 256);
+                    if (byte >= 32 && byte <= 126) {
+                        const char = String.fromCharCode(byte);
+                        hexOutput += char;
+                    } else {
+                        hexOutput += '.';
+                    }
+                }
+                
+                hexOutput += '</div>';
+            }
+            
+            return hexOutput;
+        }
+        
+        // Helper function to generate a waveform
+        function generateWaveform() {
+            let waveform = '';
+            const bars = 40;
+            
+            for (let i = 0; i < bars; i++) {
+                const height = Math.random() * 100;
+                waveform += `<div style="position: absolute; bottom: 50%; left: ${i * (100 / bars)}%; width: ${80 / bars}%; background-color: #00ff00; height: ${height / 2}%;"></div>`;
+                waveform += `<div style="position: absolute; top: 50%; left: ${i * (100 / bars)}%; width: ${80 / bars}%; background-color: #00ff00; height: ${height / 2}%;"></div>`;
+            }
+            
+            return waveform;
+        }
+        
+        // Helper function to get format description
+        function getFormatDescription(type, name) {
+            switch (type) {
+                case 'model':
+                    return name.endsWith('.abc') 
+                        ? 'ABC (Actor Binary Cache) files store 3D models used in The Matrix Online. They contain meshes, skeletons, animations, and material definitions. These files are optimized for the Lithtech Jupiter engine.'
+                        : 'MOB (Matrix Online Binary) files are specialized model files for The Matrix Online. They contain character models, equipment, and props used in the game world.';
+                case 'texture':
+                    return 'DTX (DirectX Texture) files are proprietary texture files used in the Lithtech engine. They contain image data, mipmaps, and surface properties for rendering in-game textures.';
+                case 'sound':
+                    return 'WAV audio files in Matrix Online store various sound effects, dialogue, and ambient audio. These files use standard PCM encoding.';
+                case 'video':
+                    return 'BIK (Bink Video) files are used for storing cinematics and cutscenes in The Matrix Online. They contain compressed video and audio streams.';
+                case 'dll':
+                    return 'DLL (Dynamic Link Library) files contain executable code and resources used by The Matrix Online. These files implement game logic, rendering, and other core functionalities.';
+                default:
+                    return 'This file is part of The Matrix Online game data.';
+            }
+        }
+    </script>
+</body>
+</html>
