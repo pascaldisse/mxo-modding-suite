@@ -8,6 +8,7 @@
     <!-- External Dependencies -->
     <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+    <!-- Note: For production, precompile scripts instead of using in-browser Babel transformer -->
     <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.23.5/babel.min.js"></script>
     
     <!-- Three.js ES Modules -->
@@ -362,7 +363,7 @@
                     dialogueType: 3, // Threat
                     nextDialogueId: -1,
                     audioFile: 'audio/agent_smith/threat01.wav',
-                    text: 'Human beings are a disease. You are a plague and we are the cure.'
+                    text: "Human beings are a disease. You are a plague and we are the cure."
                 }
             ],
             'Morpheus': [
@@ -372,7 +373,7 @@
                     dialogueType: 1, // Greeting
                     nextDialogueId: 202,
                     audioFile: 'audio/morpheus/greeting01.wav',
-                    text: 'Welcome to the real world.'
+                    text: "Welcome to the real world."
                 },
                 {
                     id: 202,
@@ -380,7 +381,7 @@
                     dialogueType: 2, // Conversation
                     nextDialogueId: 203,
                     audioFile: 'audio/morpheus/convo01.wav',
-                    text: 'What you know you can't explain, but you feel it. You've felt it your entire life.'
+                    text: "What you know you can't explain, but you feel it. You've felt it your entire life."
                 },
                 {
                     id: 203,
