@@ -68,6 +68,16 @@
             color: var(--matrix-black);
         }
         
+        .matrix-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .matrix-button:disabled:hover {
+            background-color: var(--matrix-dark);
+            color: var(--matrix-green);
+        }
+        
         .matrix-header {
             background-color: var(--matrix-dark);
             border-bottom: 2px solid var(--matrix-green);
@@ -170,6 +180,20 @@
             width: 100%;
             height: 100%;
             opacity: 0.5;
+        }
+        
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 8, 0, 0.8);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
         }
         
         /* Tailwind-like utility classes */
@@ -579,18 +603,53 @@
                 }, 2000);
             }, []);
             
-            const handleSelectGameDirectory = () => {
+            const handleSelectGameDirectory = async () => {
                 setIsLoading(true);
                 
-                // In a real application, this would use the File System Access API
-                // to allow the user to select their MxO game directory
-                alert('This would open a directory picker in a real implementation');
-                
-                // Simulate loading the game directory
-                setTimeout(() => {
-                    setGameDirectory('/path/to/mxo');
+                try {
+                    // Use the File System Access API to select a directory
+                    if ('showDirectoryPicker' in window) {
+                        try {
+                            const dirHandle = await window.showDirectoryPicker({
+                                id: 'mxoGameDir',
+                                startIn: 'desktop',
+                                mode: 'read'
+                            });
+                            
+                            // Get directory path or name
+                            let dirPath = dirHandle.name;
+                            
+                            // Load and scan for NPC and dialogue files
+                            console.log(`Selected directory: ${dirPath}`);
+                            
+                            // In a real implementation, we would scan for .msg files and NPC models
+                            // For this demo, we'll just set the directory and use our mock data
+                            setGameDirectory(dirPath);
+                            
+                            // We could load real NPCs here, but for the demo we'll keep using mocks
+                            // const loadedNpcs = await scanForNpcs(dirHandle);
+                            // setNpcs(loadedNpcs);
+                        } catch (err) {
+                            if (err.name !== 'AbortError') {
+                                console.error('Error selecting directory:', err);
+                                alert('Failed to open directory: ' + err.message);
+                            }
+                        }
+                    } else {
+                        // Fallback for browsers that don't support the File System Access API
+                        alert('Your browser doesn\'t support directory selection. Please use Chrome, Edge, or another browser that supports the File System Access API.');
+                        
+                        // Simulate directory selection for demo purposes
+                        setTimeout(() => {
+                            setGameDirectory('Matrix Online Game Directory (Simulated)');
+                        }, 500);
+                    }
+                } catch (error) {
+                    console.error('Directory selection error:', error);
+                    alert('Error selecting directory: ' + error.message);
+                } finally {
                     setIsLoading(false);
-                }, 1000);
+                }
             };
             
             const handleSelectNpc = (npc) => {
@@ -613,6 +672,13 @@
             
             return (
                 <div className="flex flex-col h-full">
+                    {/* Loading overlay */}
+                    {isLoading && (
+                        <div className="loading-overlay">
+                            <div className="loading-text">Scanning directory...</div>
+                        </div>
+                    )}
+                    
                     <div className="matrix-header">
                         <div className="matrix-title">NPC Dialogue Editor</div>
                         <div>
@@ -620,11 +686,21 @@
                                 <button 
                                     className="matrix-button"
                                     onClick={handleSelectGameDirectory}
+                                    disabled={isLoading}
                                 >
-                                    Select Game Directory
+                                    {isLoading ? "Loading..." : "Select Game Directory"}
                                 </button>
                             ) : (
-                                <span className="text-sm">Directory: {gameDirectory}</span>
+                                <div className="flex items-center">
+                                    <span className="text-sm mr-2">Directory: {gameDirectory}</span>
+                                    <button 
+                                        className="matrix-button text-xs"
+                                        onClick={handleSelectGameDirectory}
+                                        disabled={isLoading}
+                                    >
+                                        Change
+                                    </button>
+                                </div>
                             )}
                         </div>
                     </div>
