@@ -294,68 +294,127 @@
                         const content = e.target.result;
                         const dialogues = [];
                         
+                        // Log file content for debugging
+                        console.log(`===== DIALOGUE FILE: ${file.name} =====`);
+                        if (typeof content === 'string') {
+                            // Log first 500 chars of content
+                            console.log(content.slice(0, 500) + (content.length > 500 ? '...' : ''));
+                            
+                            // Check if it has any dialogue-like content
+                            const hasQuotes = content.includes('"') && content.includes('"');
+                            const hasBrackets = content.includes('[') && content.includes(']');
+                            const hasDialogueMarkers = content.includes('ID:') || content.includes('Type:');
+                            
+                            console.log(`File contains quotes: ${hasQuotes}, brackets: ${hasBrackets}, dialogue markers: ${hasDialogueMarkers}`);
+                        } else {
+                            console.log('Binary content (not displayed)');
+                        }
+                        console.log('===== END FILE CONTENT =====');
+                        
                         // There are two possible formats we'll try to parse:
                         // 1. Binary .MSG format
                         // 2. Text-based dialogue format
                         
                         // First, try to parse as a text file
                         if (typeof content === 'string') {
-                            // Simple text format parser
-                            const lines = content.split(/\r?\n/);
-                            let currentDialogue = null;
-                            
-                            for (let i = 0; i < lines.length; i++) {
-                                const line = lines[i].trim();
+                            // Extract any sentences that look like dialogue (contain quotes)
+                            const quoteMatches = content.match(/"([^"]+)"/g);
+                            if (quoteMatches && quoteMatches.length > 0) {
+                                console.log(`Found ${quoteMatches.length} quoted strings that could be dialogue`);
                                 
-                                // Skip empty lines and comments
-                                if (!line || line.startsWith('//') || line.startsWith('#')) {
-                                    continue;
-                                }
-                                
-                                // Check for dialogue ID marker
-                                if (line.startsWith('[') && line.includes(']')) {
-                                    // New dialogue entry
-                                    if (currentDialogue) {
-                                        dialogues.push(currentDialogue);
-                                    }
-                                    
-                                    // Parse ID from format like [ID:1001]
-                                    const idMatch = line.match(/\[ID:(\d+)\]/);
-                                    const typeMatch = line.match(/\(Type:(\d+)\)/);
-                                    
-                                    currentDialogue = {
-                                        id: idMatch ? parseInt(idMatch[1]) : dialogues.length + 1,
+                                // Create dialogue entries from quotes
+                                for (let i = 0; i < Math.min(quoteMatches.length, 10); i++) {
+                                    // Remove quotes around the text
+                                    const text = quoteMatches[i].slice(1, -1);
+                                    dialogues.push({
+                                        id: i + 1,
                                         npcId: 0, // Will be assigned based on filename or content
-                                        dialogueType: typeMatch ? parseInt(typeMatch[1]) : 0,
-                                        nextDialogueId: -1,
+                                        dialogueType: i === 0 ? 1 : 2, // First is greeting, rest are conversation
+                                        nextDialogueId: i < quoteMatches.length - 1 ? i + 2 : -1,
                                         audioFile: '',
-                                        text: ''
-                                    };
+                                        text: text
+                                    });
+                                }
+                            } else {
+                                // Simple text format parser
+                                const lines = content.split(/\r?\n/);
+                                let currentDialogue = null;
+                                
+                                for (let i = 0; i < lines.length; i++) {
+                                    const line = lines[i].trim();
                                     
-                                    // Check for quoted text in the same line
-                                    const textMatch = line.match(/"([^"]*)"/);
-                                    if (textMatch) {
-                                        currentDialogue.text = textMatch[1];
+                                    // Skip empty lines and comments
+                                    if (!line || line.startsWith('//') || line.startsWith('#')) {
+                                        continue;
                                     }
-                                } 
-                                // Audio file reference
-                                else if (line.startsWith('Audio:') && currentDialogue) {
-                                    currentDialogue.audioFile = line.substring(6).trim();
+                                    
+                                    // Check for dialogue ID marker
+                                    if (line.startsWith('[') && line.includes(']')) {
+                                        // New dialogue entry
+                                        if (currentDialogue) {
+                                            dialogues.push(currentDialogue);
+                                        }
+                                        
+                                        // Parse ID from format like [ID:1001]
+                                        const idMatch = line.match(/\[ID:(\d+)\]/);
+                                        const typeMatch = line.match(/\(Type:(\d+)\)/);
+                                        
+                                        currentDialogue = {
+                                            id: idMatch ? parseInt(idMatch[1]) : dialogues.length + 1,
+                                            npcId: 0, // Will be assigned based on filename or content
+                                            dialogueType: typeMatch ? parseInt(typeMatch[1]) : 0,
+                                            nextDialogueId: -1,
+                                            audioFile: '',
+                                            text: ''
+                                        };
+                                        
+                                        // Check for quoted text in the same line
+                                        const textMatch = line.match(/"([^"]*)"/);
+                                        if (textMatch) {
+                                            currentDialogue.text = textMatch[1];
+                                        }
+                                    } 
+                                    // Audio file reference
+                                    else if (line.startsWith('Audio:') && currentDialogue) {
+                                        currentDialogue.audioFile = line.substring(6).trim();
+                                    }
+                                    // Next dialogue reference
+                                    else if (line.startsWith('Next:') && currentDialogue) {
+                                        const nextId = parseInt(line.substring(5).trim());
+                                        currentDialogue.nextDialogueId = isNaN(nextId) ? -1 : nextId;
+                                    }
+                                    // Plain text (must be part of dialogue)
+                                    else if (currentDialogue && !currentDialogue.text) {
+                                        currentDialogue.text = line;
+                                    }
                                 }
-                                // Next dialogue reference
-                                else if (line.startsWith('Next:') && currentDialogue) {
-                                    const nextId = parseInt(line.substring(5).trim());
-                                    currentDialogue.nextDialogueId = isNaN(nextId) ? -1 : nextId;
+                                
+                                // Add the last dialogue entry if exists
+                                if (currentDialogue) {
+                                    dialogues.push(currentDialogue);
                                 }
-                                // Plain text (must be part of dialogue)
-                                else if (currentDialogue && !currentDialogue.text) {
-                                    currentDialogue.text = line;
+                                
+                                // If no structured dialogue was found, create dialogue from text lines
+                                if (dialogues.length === 0 && lines.length > 0) {
+                                    const nonEmptyLines = lines.filter(line => 
+                                        line.trim() && !line.startsWith('#') && !line.startsWith('//')
+                                    );
+                                    
+                                    if (nonEmptyLines.length > 0) {
+                                        console.log(`Creating ${Math.min(nonEmptyLines.length, 5)} dialogue entries from unstructured text`);
+                                        
+                                        for (let i = 0; i < Math.min(nonEmptyLines.length, 5); i++) {
+                                            dialogues.push({
+                                                id: i + 1,
+                                                npcId: 0, // Will be assigned later
+                                                dialogueType: i === 0 ? 1 : 2, // First is greeting, rest are conversation
+                                                nextDialogueId: i < 4 ? i + 2 : -1,
+                                                audioFile: '',
+                                                text: nonEmptyLines[i].slice(0, 200) // Limit length
+                                            });
+                                        }
+                                    }
                                 }
-                            }
-                            
-                            // Add the last dialogue entry if exists
-                            if (currentDialogue) {
-                                dialogues.push(currentDialogue);
                             }
                         } 
                         // Try to parse as binary (for actual .MSG files)
@@ -370,6 +429,12 @@
                                 audioFile: '',
                                 text: "Binary MSG file detected. Binary parsing would be implemented in a full version."
                             });
+                        }
+                        
+                        if (dialogues.length > 0) {
+                            console.log(`Successfully parsed ${dialogues.length} dialogue entries from ${file.name}`);
+                        } else {
+                            console.log(`No dialogue entries found in ${file.name}`);
                         }
                         
                         resolve(dialogues);
@@ -1106,6 +1171,9 @@
                             console.log('File extensions found:', fileExtensions);
                             console.log(`Found ${msgFiles} .msg files and ${txtFiles} .txt files that could contain dialogue`);
                             
+                            // Reset global dialogue data
+                            window.npcDialogueData = null;
+                            
                             // Process the files to identify NPCs and dialogues
                             try {
                                 // Identify NPCs from the selected files
@@ -1225,8 +1293,14 @@
                                         
                                         // DIAGNOSTIC - Create synthetic dialogue entries for NPCs with no dialogue
                                         for (const npc of identifiedNpcs) {
-                                            if (!window.npcDialogueData[npc.name]) {
+                                            if (!window.npcDialogueData || !window.npcDialogueData[npc.name]) {
                                                 console.log(`Creating synthetic dialogue for ${npc.name}`);
+                                                
+                                                // Initialize if not exists
+                                                if (!window.npcDialogueData) {
+                                                    window.npcDialogueData = {};
+                                                }
+                                                
                                                 window.npcDialogueData[npc.name] = [{
                                                     id: 1,
                                                     npcId: npc.id,
@@ -1235,6 +1309,8 @@
                                                     audioFile: '',
                                                     text: `Synthetic dialogue for ${npc.name}. No actual dialogue file was found.`
                                                 }];
+                                            } else {
+                                                console.log(`Using real dialogue for ${npc.name} (${window.npcDialogueData[npc.name].length} entries)`);
                                             }
                                         }
                                         
