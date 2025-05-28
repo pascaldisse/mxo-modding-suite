@@ -383,14 +383,18 @@
                     reject(error);
                 };
                 
-                // Check if it's a text file by extension
-                if (file.name.toLowerCase().endsWith('.txt') || 
-                    file.name.toLowerCase().endsWith('.log') ||
-                    file.name.toLowerCase().endsWith('.csv')) {
-                    reader.readAsText(file);
-                } else {
-                    // Attempt to read as binary for .MSG files
+                // Try to read most files as text first since that's more likely to work
+                // Only use binary for known binary formats
+                const lcName = file.name.toLowerCase();
+                if (lcName.endsWith('.bin') || 
+                    lcName.endsWith('.dat') || 
+                    lcName.endsWith('.abc') || 
+                    lcName.endsWith('.mob')) {
+                    // Read these as binary
                     reader.readAsArrayBuffer(file);
+                } else {
+                    // Try to read all other files (including .msg) as text first
+                    reader.readAsText(file);
                 }
             });
         };
@@ -482,7 +486,14 @@
                 // Check if it's a potential dialogue file
                 if (filename.endsWith('.msg') || 
                     filename.endsWith('.txt') || 
+                    filename.endsWith('.log') || 
+                    filename.endsWith('.csv') || 
+                    filename.includes('dialogue') ||
+                    filename.includes('speech') ||
+                    filename.includes('text') ||
+                    filename.includes('talk') ||
                     path.includes('/dialogue/') || 
+                    path.includes('/text/') ||
                     path.includes('/speech/')) {
                     
                     // Try to match with an NPC
@@ -1035,6 +1046,11 @@
             const [searchTerm, setSearchTerm] = useState('');
             const [isLoading, setIsLoading] = useState(false);
             
+            // Initialize global dialogue data with mock data
+            useEffect(() => {
+                window.npcDialogueData = MOCK_DIALOGUES;
+            }, []);
+            
             useEffect(() => {
                 // Initialize matrix rain animation
                 initMatrixRain();
@@ -1074,6 +1090,22 @@
                             // Set the game directory
                             setGameDirectory(dirName);
                             
+                            // Log file extensions for diagnostic purposes
+                            const fileExtensions = {};
+                            let msgFiles = 0;
+                            let txtFiles = 0;
+                            
+                            for (let i = 0; i < files.length; i++) {
+                                const ext = files[i].name.split('.').pop().toLowerCase();
+                                fileExtensions[ext] = (fileExtensions[ext] || 0) + 1;
+                                
+                                if (ext === 'msg') msgFiles++;
+                                if (ext === 'txt') txtFiles++;
+                            }
+                            
+                            console.log('File extensions found:', fileExtensions);
+                            console.log(`Found ${msgFiles} .msg files and ${txtFiles} .txt files that could contain dialogue`);
+                            
                             // Process the files to identify NPCs and dialogues
                             try {
                                 // Identify NPCs from the selected files
@@ -1111,6 +1143,72 @@
                                             }
                                         }
                                         
+                                        // If we have no dialogue, try a more aggressive approach:
+                                        // Parse any text files and try to extract dialogue
+                                        if (Object.keys(npcDialogueMap).length === 0) {
+                                            console.log('No dialogues found with standard parsing. Trying aggressive parsing...');
+                                            
+                                            // Get all text files
+                                            const textFiles = [];
+                                            for (let i = 0; i < files.length; i++) {
+                                                const file = files[i];
+                                                const ext = file.name.split('.').pop().toLowerCase();
+                                                if (ext === 'txt' || ext === 'log' || ext === 'csv' || ext === 'msg') {
+                                                    textFiles.push(file);
+                                                }
+                                            }
+                                            
+                                            if (textFiles.length > 0) {
+                                                console.log(`Found ${textFiles.length} text files to parse aggressively`);
+                                                
+                                                // Create generic NPCs from text files
+                                                for (let i = 0; i < Math.min(textFiles.length, 10); i++) {
+                                                    const file = textFiles[i];
+                                                    const npcName = file.name.replace(/\.\w+$/, '')
+                                                        .split(/[_\-\s]+/)
+                                                        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                                                        .join(' ');
+                                                        
+                                                    try {
+                                                        const reader = new FileReader();
+                                                        reader.onload = (e) => {
+                                                            try {
+                                                                const content = e.target.result;
+                                                                if (typeof content === 'string') {
+                                                                    // Extract first few lines for dialogue
+                                                                    const lines = content.split(/\r?\n/).filter(line => 
+                                                                        line.trim() && !line.startsWith('#') && !line.startsWith('//')
+                                                                    );
+                                                                    
+                                                                    if (lines.length > 0) {
+                                                                        const dialogueEntries = [];
+                                                                        for (let j = 0; j < Math.min(lines.length, 5); j++) {
+                                                                            dialogueEntries.push({
+                                                                                id: j + 1,
+                                                                                npcId: identifiedNpcs.length + i + 1,
+                                                                                dialogueType: j === 0 ? 1 : 2, // First is greeting, rest are conversation
+                                                                                nextDialogueId: j < 4 ? j + 2 : -1,
+                                                                                audioFile: '',
+                                                                                text: lines[j].slice(0, 200) // Limit length
+                                                                            });
+                                                                        }
+                                                                        
+                                                                        npcDialogueMap[npcName] = dialogueEntries;
+                                                                        console.log(`Added ${dialogueEntries.length} dialogue entries for ${npcName} from file`);
+                                                                    }
+                                                                }
+                                                            } catch (error) {
+                                                                console.error(`Error parsing ${file.name}:`, error);
+                                                            }
+                                                        };
+                                                        reader.readAsText(file);
+                                                    } catch (error) {
+                                                        console.error(`Error reading ${file.name}:`, error);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        
                                         // Use the identified dialogues
                                         if (Object.keys(npcDialogueMap).length > 0) {
                                             setDialogues([]); // Clear any current dialogues
@@ -1119,8 +1217,25 @@
                                             // Store the dialogue map for lookup
                                             window.npcDialogueData = npcDialogueMap;
                                         } else {
+                                            console.log('No dialogues found in any files. Using mock data.');
+                                            
                                             // If we couldn't parse any real dialogues, use the mock data
                                             window.npcDialogueData = MOCK_DIALOGUES;
+                                        }
+                                        
+                                        // DIAGNOSTIC - Create synthetic dialogue entries for NPCs with no dialogue
+                                        for (const npc of identifiedNpcs) {
+                                            if (!window.npcDialogueData[npc.name]) {
+                                                console.log(`Creating synthetic dialogue for ${npc.name}`);
+                                                window.npcDialogueData[npc.name] = [{
+                                                    id: 1,
+                                                    npcId: npc.id,
+                                                    dialogueType: 1,
+                                                    nextDialogueId: -1,
+                                                    audioFile: '',
+                                                    text: `Synthetic dialogue for ${npc.name}. No actual dialogue file was found.`
+                                                }];
+                                            }
                                         }
                                         
                                         setIsLoading(false);
