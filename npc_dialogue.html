@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Matrix Online NPC Dialogue Editor</title>
+    
+    <!-- External Dependencies -->
+    <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.23.5/babel.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.153.0/build/three.min.js"></script>
+    <script>
+        // Ensure THREE is available globally
+        window.THREE = THREE;
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.153.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.153.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Monaco Editor -->
+    <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.43.0/min/vs/loader.js"></script>
+    
+    <style>
+        /* Matrix theme styling */
+        :root {
+            --matrix-green: #00ff00;
+            --matrix-dark: #001a00;
+            --matrix-black: #000800;
+            --matrix-light: #ccffcc;
+        }
+        
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Courier New', monospace;
+            background-color: var(--matrix-black);
+            color: var(--matrix-green);
+        }
+        
+        .matrix-button {
+            background-color: var(--matrix-dark);
+            color: var(--matrix-green);
+            border: 1px solid var(--matrix-green);
+            padding: 8px 16px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .matrix-button:hover {
+            background-color: var(--matrix-green);
+            color: var(--matrix-black);
+        }
+        
+        .matrix-header {
+            background-color: var(--matrix-dark);
+            border-bottom: 2px solid var(--matrix-green);
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+        }
+        
+        .matrix-title {
+            font-size: 24px;
+            font-weight: bold;
+            color: var(--matrix-green);
+            letter-spacing: 2px;
+        }
+        
+        .npc-list {
+            height: calc(100vh - 60px);
+            overflow-y: auto;
+            background-color: var(--matrix-dark);
+            border-right: 1px solid var(--matrix-green);
+            width: 250px;
+        }
+        
+        .npc-item {
+            padding: 8px 12px;
+            cursor: pointer;
+            border-bottom: 1px solid rgba(0, 255, 0, 0.2);
+        }
+        
+        .npc-item:hover {
+            background-color: rgba(0, 255, 0, 0.1);
+        }
+        
+        .npc-item.selected {
+            background-color: rgba(0, 255, 0, 0.2);
+        }
+        
+        .model-preview {
+            height: 300px;
+            background-color: var(--matrix-dark);
+            border: 1px solid var(--matrix-green);
+        }
+        
+        .dialogue-editor {
+            background-color: var(--matrix-black);
+            border: 1px solid var(--matrix-green);
+            height: calc(100vh - 430px);
+        }
+        
+        .audio-player {
+            background-color: var(--matrix-dark);
+            border: 1px solid var(--matrix-green);
+            padding: 10px;
+            margin-top: 10px;
+        }
+        
+        .search-box {
+            background-color: var(--matrix-dark);
+            border: 1px solid var(--matrix-green);
+            color: var(--matrix-green);
+            padding: 5px 10px;
+            width: 100%;
+            margin-bottom: 10px;
+        }
+        
+        .dialogue-container {
+            padding: 15px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .loading-matrix {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--matrix-black);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+        
+        .loading-text {
+            font-size: 24px;
+            color: var(--matrix-green);
+            margin-top: 20px;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .matrix-rain {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0.5;
+        }
+        
+        /* Tailwind-like utility classes */
+        .flex { display: flex; }
+        .flex-col { flex-direction: column; }
+        .flex-row { flex-direction: row; }
+        .items-center { align-items: center; }
+        .justify-between { justify-content: space-between; }
+        .w-full { width: 100%; }
+        .h-full { height: 100%; }
+        .p-2 { padding: 0.5rem; }
+        .p-4 { padding: 1rem; }
+        .m-2 { margin: 0.5rem; }
+        .mt-2 { margin-top: 0.5rem; }
+        .mb-2 { margin-bottom: 0.5rem; }
+        .text-sm { font-size: 0.875rem; }
+        .text-xs { font-size: 0.75rem; }
+        .border { border-width: 1px; }
+        .rounded { border-radius: 0.25rem; }
+    </style>
+</head>
+<body>
+    <div id="loading" class="loading-matrix">
+        <canvas id="matrix-rain" class="matrix-rain"></canvas>
+        <div class="loading-text" id="loading-text">Initializing NPC Dialogue Editor...</div>
+    </div>
+    
+    <div id="root"></div>
+
+    <script type="text/babel">
+        // Matrix Digital Rain Animation
+        const initMatrixRain = () => {
+            const canvas = document.getElementById('matrix-rain');
+            const ctx = canvas.getContext('2d');
+            
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            
+            const matrix = "ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789@#$%^&*()*&^%";
+            const fontSize = 14;
+            const columns = canvas.width / fontSize;
+            
+            const drops = [];
+            for (let i = 0; i < columns; i++) {
+                drops[i] = 1;
+            }
+            
+            const drawMatrix = () => {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                ctx.fillStyle = '#00ff00';
+                ctx.font = fontSize + 'px monospace';
+                
+                for (let i = 0; i < drops.length; i++) {
+                    const text = matrix[Math.floor(Math.random() * matrix.length)];
+                    ctx.fillText(text, i * fontSize, drops[i] * fontSize);
+                    
+                    if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) {
+                        drops[i] = 0;
+                    }
+                    
+                    drops[i]++;
+                }
+            };
+            
+            setInterval(drawMatrix, 33);
+        };
+        
+        // Main React Application
+        const { useState, useEffect, useRef } = React;
+        
+        // Data structure for NPC dialogues
+        const NPC_DIALOGUE_FORMAT = {
+            // Typical message file structure for NPCs in MxO
+            MSG_HEADER: {
+                signature: 'MSG',
+                version: 1.0,
+                entryCount: 0
+            },
+            MSG_ENTRY: {
+                id: 0,              // Unique ID for this dialogue entry
+                npcId: 0,           // ID of the NPC speaking this line
+                dialogueType: 0,    // Type (greeting, response, quest, etc)
+                nextDialogueId: -1, // Next dialogue in sequence (-1 for none)
+                audioFile: '',      // Reference to audio file
+                text: ''            // The actual dialogue text
+            }
+        };
+        
+        // NPC data structure
+        const NPC_DATA_STRUCTURE = {
+            id: 0,
+            name: '',
+            modelFile: '',     // Path to the 3D model file
+            dialogueFiles: [], // Array of message files containing dialogues
+            faction: '',       // Which faction this NPC belongs to
+            location: '',      // Where the NPC can be found
+            thumbnail: ''      // Small image representation
+        };
+        
+        // Mock NPC data (in a real implementation, this would be loaded from game files)
+        const MOCK_NPCS = [
+            {
+                id: 1,
+                name: 'Agent Smith',
+                modelFile: 'characters/agents/smith.abc',
+                dialogueFiles: ['dialogues/agent_smith.msg'],
+                faction: 'Machines',
+                location: 'Downtown',
+                thumbnail: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+            },
+            {
+                id: 2,
+                name: 'Morpheus',
+                modelFile: 'characters/zion/morpheus.abc',
+                dialogueFiles: ['dialogues/morpheus.msg'],
+                faction: 'Zion',
+                location: 'Zion Control',
+                thumbnail: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+            },
+            {
+                id: 3,
+                name: 'Persephone',
+                modelFile: 'characters/exiles/persephone.abc',
+                dialogueFiles: ['dialogues/persephone.msg'],
+                faction: 'Exiles',
+                location: 'Club Hel',
+                thumbnail: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+            },
+            {
+                id: 4,
+                name: 'Seraph',
+                modelFile: 'characters/exiles/seraph.abc',
+                dialogueFiles: ['dialogues/seraph.msg'],
+                faction: 'Exiles',
+                location: 'Teahouse',
+                thumbnail: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+            },
+            {
+                id: 5,
+                name: 'The Oracle',
+                modelFile: 'characters/exiles/oracle.abc',
+                dialogueFiles: ['dialogues/oracle.msg'],
+                faction: 'Exiles',
+                location: 'Oracle Apartment',
+                thumbnail: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+            },
+            {
+                id: 6,
+                name: 'Niobe',
+                modelFile: 'characters/zion/niobe.abc',
+                dialogueFiles: ['dialogues/niobe.msg'],
+                faction: 'Zion',
+                location: 'Zion Command',
+                thumbnail: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+            },
+            {
+                id: 7,
+                name: 'The Merovingian',
+                modelFile: 'characters/exiles/merovingian.abc',
+                dialogueFiles: ['dialogues/merovingian.msg'],
+                faction: 'Exiles',
+                location: 'The Restaurant',
+                thumbnail: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+            }
+        ];
+        
+        // Mock dialogue data
+        const MOCK_DIALOGUES = {
+            'Agent Smith': [
+                {
+                    id: 101,
+                    npcId: 1,
+                    dialogueType: 1, // Greeting
+                    nextDialogueId: 102,
+                    audioFile: 'audio/agent_smith/greeting01.wav',
+                    text: 'Mr. Anderson. We've been expecting you.'
+                },
+                {
+                    id: 102,
+                    npcId: 1,
+                    dialogueType: 2, // Conversation
+                    nextDialogueId: 103,
+                    audioFile: 'audio/agent_smith/convo01.wav',
+                    text: 'It seems that you've been living two lives, Mr. Anderson.'
+                },
+                {
+                    id: 103,
+                    npcId: 1, 
+                    dialogueType: 3, // Threat
+                    nextDialogueId: -1,
+                    audioFile: 'audio/agent_smith/threat01.wav',
+                    text: 'Human beings are a disease. You are a plague and we are the cure.'
+                }
+            ],
+            'Morpheus': [
+                {
+                    id: 201,
+                    npcId: 2,
+                    dialogueType: 1, // Greeting
+                    nextDialogueId: 202,
+                    audioFile: 'audio/morpheus/greeting01.wav',
+                    text: 'Welcome to the real world.'
+                },
+                {
+                    id: 202,
+                    npcId: 2,
+                    dialogueType: 2, // Conversation
+                    nextDialogueId: 203,
+                    audioFile: 'audio/morpheus/convo01.wav',
+                    text: 'What you know you can't explain, but you feel it. You've felt it your entire life.'
+                },
+                {
+                    id: 203,
+                    npcId: 2,
+                    dialogueType: 4, // Quest
+                    nextDialogueId: -1,
+                    audioFile: 'audio/morpheus/quest01.wav',
+                    text: 'I'm trying to free your mind, Neo. But I can only show you the door. You're the one that has to walk through it.'
+                }
+            ]
+        };
+        
+        // 3D Model Viewer Component
+        const ModelViewer = ({ modelFile }) => {
+            const containerRef = useRef(null);
+            const [isLoading, setIsLoading] = useState(true);
+            
+            useEffect(() => {
+                if (!containerRef.current) return;
+                
+                // Set up Three.js scene
+                const scene = new THREE.Scene();
+                scene.background = new THREE.Color(0x001a00);
+                
+                // Add lights
+                const ambientLight = new THREE.AmbientLight(0x404040);
+                scene.add(ambientLight);
+                
+                const directionalLight = new THREE.DirectionalLight(0x00ff00, 1);
+                directionalLight.position.set(1, 1, 1);
+                scene.add(directionalLight);
+                
+                // Add camera
+                const camera = new THREE.PerspectiveCamera(
+                    75,
+                    containerRef.current.clientWidth / containerRef.current.clientHeight,
+                    0.1,
+                    1000
+                );
+                camera.position.z = 5;
+                
+                // Create renderer
+                const renderer = new THREE.WebGLRenderer({ antialias: true });
+                renderer.setSize(containerRef.current.clientWidth, containerRef.current.clientHeight);
+                containerRef.current.appendChild(renderer.domElement);
+                
+                // Add controls
+                const controls = new THREE.OrbitControls(camera, renderer.domElement);
+                controls.enableDamping = true;
+                controls.dampingFactor = 0.05;
+                
+                // Load a placeholder model (in a real app, we'd load the actual model)
+                const geometry = new THREE.BoxGeometry(1, 2, 1);
+                const material = new THREE.MeshPhongMaterial({ 
+                    color: 0x00ff00, 
+                    wireframe: true,
+                    emissive: 0x003300
+                });
+                const cube = new THREE.Mesh(geometry, material);
+                scene.add(cube);
+                
+                // Animation loop
+                const animate = () => {
+                    requestAnimationFrame(animate);
+                    controls.update();
+                    cube.rotation.y += 0.01;
+                    renderer.render(scene, camera);
+                };
+                
+                animate();
+                setIsLoading(false);
+                
+                // Cleanup
+                return () => {
+                    if (containerRef.current) {
+                        containerRef.current.removeChild(renderer.domElement);
+                    }
+                    
+                    // Dispose of Three.js resources
+                    geometry.dispose();
+                    material.dispose();
+                    renderer.dispose();
+                };
+            }, [modelFile]);
+            
+            return (
+                <div className="model-preview w-full" ref={containerRef}>
+                    {isLoading && <div className="p-4 text-center">Loading model...</div>}
+                </div>
+            );
+        };
+        
+        // Audio Player Component
+        const AudioPlayer = ({ audioFile }) => {
+            return (
+                <div className="audio-player w-full">
+                    <h3 className="mb-2">Voice Sample</h3>
+                    <audio controls className="w-full">
+                        <source src={audioFile || '#'} type="audio/wav" />
+                        Your browser does not support the audio element.
+                    </audio>
+                    <div className="flex justify-between mt-2">
+                        <button className="matrix-button text-xs">Record New</button>
+                        <button className="matrix-button text-xs">Import</button>
+                        <button className="matrix-button text-xs">Export</button>
+                    </div>
+                </div>
+            );
+        };
+        
+        // Monaco Editor Setup for Dialogue Editing
+        const DialogueEditor = ({ dialogues, onSave }) => {
+            const editorRef = useRef(null);
+            const containerRef = useRef(null);
+            
+            useEffect(() => {
+                if (!containerRef.current) return;
+                
+                // Initialize Monaco Editor
+                require.config({ paths: { 'vs': 'https://cdn.jsdelivr.net/npm/monaco-editor@0.43.0/min/vs' }});
+                require(['vs/editor/editor.main'], () => {
+                    // Convert dialogues to formatted text
+                    const dialogueText = dialogues ? dialogues.map(d => 
+                        `[ID: ${d.id}] (Type: ${d.dialogueType}) "${d.text}"\n` +
+                        `Audio: ${d.audioFile}\n` +
+                        `Next: ${d.nextDialogueId}\n`
+                    ).join('\n') : '';
+                    
+                    // Create editor
+                    if (!editorRef.current) {
+                        editorRef.current = monaco.editor.create(containerRef.current, {
+                            value: dialogueText,
+                            language: 'plaintext',
+                            theme: 'vs-dark',
+                            minimap: { enabled: true },
+                            automaticLayout: true,
+                            fontSize: 14,
+                            lineNumbers: 'on',
+                            scrollBeyondLastLine: false,
+                            wordWrap: 'on'
+                        });
+                        
+                        // Custom Matrix theme
+                        monaco.editor.defineTheme('matrix-theme', {
+                            base: 'vs-dark',
+                            inherit: true,
+                            rules: [
+                                { token: 'comment', foreground: '008800' },
+                                { token: 'string', foreground: '00ff00' }
+                            ],
+                            colors: {
+                                'editor.background': '#000800',
+                                'editor.foreground': '#00ff00',
+                                'editor.lineHighlightBackground': '#003300',
+                                'editorCursor.foreground': '#00ff00',
+                                'editorWhitespace.foreground': '#005500'
+                            }
+                        });
+                        
+                        monaco.editor.setTheme('matrix-theme');
+                    } else {
+                        editorRef.current.setValue(dialogueText);
+                    }
+                });
+                
+                return () => {
+                    if (editorRef.current) {
+                        editorRef.current.dispose();
+                        editorRef.current = null;
+                    }
+                };
+            }, [dialogues]);
+            
+            return (
+                <div className="dialogue-editor w-full" ref={containerRef}></div>
+            );
+        };
+        
+        // Main App Component
+        const App = () => {
+            const [gameDirectory, setGameDirectory] = useState(null);
+            const [npcs, setNpcs] = useState(MOCK_NPCS);
+            const [selectedNpc, setSelectedNpc] = useState(null);
+            const [dialogues, setDialogues] = useState([]);
+            const [searchTerm, setSearchTerm] = useState('');
+            const [isLoading, setIsLoading] = useState(false);
+            
+            useEffect(() => {
+                // Initialize matrix rain animation
+                initMatrixRain();
+                
+                // Simulate loading screen
+                setTimeout(() => {
+                    document.getElementById('loading').style.display = 'none';
+                }, 2000);
+            }, []);
+            
+            const handleSelectGameDirectory = () => {
+                setIsLoading(true);
+                
+                // In a real application, this would use the File System Access API
+                // to allow the user to select their MxO game directory
+                alert('This would open a directory picker in a real implementation');
+                
+                // Simulate loading the game directory
+                setTimeout(() => {
+                    setGameDirectory('/path/to/mxo');
+                    setIsLoading(false);
+                }, 1000);
+            };
+            
+            const handleSelectNpc = (npc) => {
+                setSelectedNpc(npc);
+                // Load dialogues for this NPC
+                setDialogues(MOCK_DIALOGUES[npc.name] || []);
+            };
+            
+            const handleSaveDialogues = (updatedDialogues) => {
+                // In a real implementation, this would save the dialogues back to the game files
+                console.log('Saving dialogues:', updatedDialogues);
+                // Update the mock data for this demo
+                setDialogues(updatedDialogues);
+            };
+            
+            const filteredNpcs = npcs.filter(npc => 
+                npc.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                npc.faction.toLowerCase().includes(searchTerm.toLowerCase())
+            );
+            
+            return (
+                <div className="flex flex-col h-full">
+                    <div className="matrix-header">
+                        <div className="matrix-title">NPC Dialogue Editor</div>
+                        <div>
+                            {!gameDirectory ? (
+                                <button 
+                                    className="matrix-button"
+                                    onClick={handleSelectGameDirectory}
+                                >
+                                    Select Game Directory
+                                </button>
+                            ) : (
+                                <span className="text-sm">Directory: {gameDirectory}</span>
+                            )}
+                        </div>
+                    </div>
+                    
+                    <div className="flex flex-row h-full">
+                        {/* NPC List */}
+                        <div className="npc-list">
+                            <div className="p-2">
+                                <input
+                                    type="text"
+                                    className="search-box"
+                                    placeholder="Search NPCs..."
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                />
+                                
+                                <div className="text-sm mb-2">
+                                    {filteredNpcs.length} NPCs found
+                                </div>
+                                
+                                {filteredNpcs.map(npc => (
+                                    <div 
+                                        key={npc.id}
+                                        className={`npc-item ${selectedNpc && selectedNpc.id === npc.id ? 'selected' : ''}`}
+                                        onClick={() => handleSelectNpc(npc)}
+                                    >
+                                        <div>{npc.name}</div>
+                                        <div className="text-xs">{npc.faction}</div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        
+                        {/* Dialogue Editor Area */}
+                        <div className="dialogue-container">
+                            {selectedNpc ? (
+                                <>
+                                    <h2>{selectedNpc.name} - {selectedNpc.faction}</h2>
+                                    <div className="text-sm mb-2">Location: {selectedNpc.location}</div>
+                                    
+                                    {/* 3D Model Preview */}
+                                    <ModelViewer modelFile={selectedNpc.modelFile} />
+                                    
+                                    {/* Audio Player */}
+                                    <AudioPlayer audioFile={dialogues[0]?.audioFile} />
+                                    
+                                    {/* Dialogue Editor */}
+                                    <h3 className="mt-2 mb-2">Dialogue Sequences</h3>
+                                    <DialogueEditor 
+                                        dialogues={dialogues}
+                                        onSave={handleSaveDialogues}
+                                    />
+                                    
+                                    <div className="flex justify-between mt-2">
+                                        <button className="matrix-button">Add Dialogue</button>
+                                        <button className="matrix-button">Save Changes</button>
+                                        <button className="matrix-button">Test In-Game</button>
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="p-4 text-center">
+                                    <p>Select an NPC from the list to edit their dialogue</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+        
+        // Render the app
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>
