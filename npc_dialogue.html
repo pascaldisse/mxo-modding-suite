@@ -607,47 +607,66 @@
                 setIsLoading(true);
                 
                 try {
-                    // Use the File System Access API to select a directory
-                    if ('showDirectoryPicker' in window) {
-                        try {
-                            const dirHandle = await window.showDirectoryPicker({
-                                id: 'mxoGameDir',
-                                startIn: 'desktop',
-                                mode: 'read'
-                            });
-                            
-                            // Get directory path or name
-                            let dirPath = dirHandle.name;
-                            
-                            // Load and scan for NPC and dialogue files
-                            console.log(`Selected directory: ${dirPath}`);
-                            
-                            // In a real implementation, we would scan for .msg files and NPC models
-                            // For this demo, we'll just set the directory and use our mock data
-                            setGameDirectory(dirPath);
-                            
-                            // We could load real NPCs here, but for the demo we'll keep using mocks
-                            // const loadedNpcs = await scanForNpcs(dirHandle);
-                            // setNpcs(loadedNpcs);
-                        } catch (err) {
-                            if (err.name !== 'AbortError') {
-                                console.error('Error selecting directory:', err);
-                                alert('Failed to open directory: ' + err.message);
-                            }
-                        }
-                    } else {
-                        // Fallback for browsers that don't support the File System Access API
-                        alert('Your browser doesn\'t support directory selection. Please use Chrome, Edge, or another browser that supports the File System Access API.');
+                    // Alternative approach using input type="file" for better compatibility
+                    // Create a file input element
+                    const fileInput = document.createElement('input');
+                    fileInput.type = 'file';
+                    fileInput.webkitdirectory = true; // Chrome, Edge, Opera, Safari
+                    fileInput.directory = true; // Firefox (though not fully supported)
+                    fileInput.multiple = true;
+                    
+                    // Set up the change event handler
+                    fileInput.onchange = (event) => {
+                        // Get selected files
+                        const files = event.target.files;
                         
-                        // Simulate directory selection for demo purposes
-                        setTimeout(() => {
-                            setGameDirectory('Matrix Online Game Directory (Simulated)');
-                        }, 500);
-                    }
+                        if (files && files.length > 0) {
+                            // Determine the common directory path
+                            // Get the first file's path and extract the directory
+                            const firstFile = files[0];
+                            const pathParts = firstFile.webkitRelativePath.split('/');
+                            const dirName = pathParts[0]; // The root directory name
+                            
+                            console.log(`Selected directory: ${dirName} with ${files.length} files`);
+                            
+                            // Set the game directory
+                            setGameDirectory(dirName);
+                            
+                            // Simulate scanning files (in a real app, we'd analyze the files here)
+                            setTimeout(() => {
+                                // In a real implementation, we would:
+                                // 1. Scan for .msg files with dialogue
+                                // 2. Look for NPC model files (.abc, etc.)
+                                // 3. Parse the files to extract NPC data
+                                
+                                // For this demo, we'll keep using mock data
+                                setIsLoading(false);
+                            }, 1000);
+                        } else {
+                            // No files selected
+                            setIsLoading(false);
+                        }
+                    };
+                    
+                    // Trigger the file dialog
+                    fileInput.click();
+                    
+                    // Store the current timestamp to handle potential cancellation
+                    const startTime = Date.now();
+                    
+                    // Handle potential cancellation
+                    setTimeout(() => {
+                        // If we're still loading after 5 seconds, user probably canceled
+                        // We use a direct check rather than relying on a closure over isLoading
+                        const currentState = document.getElementById('loading-overlay-active');
+                        if (currentState && Date.now() - startTime >= 5000) {
+                            setIsLoading(false);
+                        }
+                    }, 5000);
+                    
                 } catch (error) {
                     console.error('Directory selection error:', error);
                     alert('Error selecting directory: ' + error.message);
-                } finally {
                     setIsLoading(false);
                 }
             };
@@ -674,7 +693,7 @@
                 <div className="flex flex-col h-full">
                     {/* Loading overlay */}
                     {isLoading && (
-                        <div className="loading-overlay">
+                        <div className="loading-overlay" id="loading-overlay-active">
                             <div className="loading-text">Scanning directory...</div>
                         </div>
                     )}
