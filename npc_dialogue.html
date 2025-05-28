@@ -284,6 +284,322 @@
             }
         };
         
+        // Message file parser
+        const parseMessageFile = async (file) => {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                
+                reader.onload = (e) => {
+                    try {
+                        const content = e.target.result;
+                        const dialogues = [];
+                        
+                        // There are two possible formats we'll try to parse:
+                        // 1. Binary .MSG format
+                        // 2. Text-based dialogue format
+                        
+                        // First, try to parse as a text file
+                        if (typeof content === 'string') {
+                            // Simple text format parser
+                            const lines = content.split(/\r?\n/);
+                            let currentDialogue = null;
+                            
+                            for (let i = 0; i < lines.length; i++) {
+                                const line = lines[i].trim();
+                                
+                                // Skip empty lines and comments
+                                if (!line || line.startsWith('//') || line.startsWith('#')) {
+                                    continue;
+                                }
+                                
+                                // Check for dialogue ID marker
+                                if (line.startsWith('[') && line.includes(']')) {
+                                    // New dialogue entry
+                                    if (currentDialogue) {
+                                        dialogues.push(currentDialogue);
+                                    }
+                                    
+                                    // Parse ID from format like [ID:1001]
+                                    const idMatch = line.match(/\[ID:(\d+)\]/);
+                                    const typeMatch = line.match(/\(Type:(\d+)\)/);
+                                    
+                                    currentDialogue = {
+                                        id: idMatch ? parseInt(idMatch[1]) : dialogues.length + 1,
+                                        npcId: 0, // Will be assigned based on filename or content
+                                        dialogueType: typeMatch ? parseInt(typeMatch[1]) : 0,
+                                        nextDialogueId: -1,
+                                        audioFile: '',
+                                        text: ''
+                                    };
+                                    
+                                    // Check for quoted text in the same line
+                                    const textMatch = line.match(/"([^"]*)"/);
+                                    if (textMatch) {
+                                        currentDialogue.text = textMatch[1];
+                                    }
+                                } 
+                                // Audio file reference
+                                else if (line.startsWith('Audio:') && currentDialogue) {
+                                    currentDialogue.audioFile = line.substring(6).trim();
+                                }
+                                // Next dialogue reference
+                                else if (line.startsWith('Next:') && currentDialogue) {
+                                    const nextId = parseInt(line.substring(5).trim());
+                                    currentDialogue.nextDialogueId = isNaN(nextId) ? -1 : nextId;
+                                }
+                                // Plain text (must be part of dialogue)
+                                else if (currentDialogue && !currentDialogue.text) {
+                                    currentDialogue.text = line;
+                                }
+                            }
+                            
+                            // Add the last dialogue entry if exists
+                            if (currentDialogue) {
+                                dialogues.push(currentDialogue);
+                            }
+                        } 
+                        // Try to parse as binary (for actual .MSG files)
+                        else {
+                            // In a real implementation, we'd parse the binary format
+                            // For this demo, we'll return a placeholder message
+                            dialogues.push({
+                                id: 1,
+                                npcId: 1,
+                                dialogueType: 1,
+                                nextDialogueId: -1,
+                                audioFile: '',
+                                text: "Binary MSG file detected. Binary parsing would be implemented in a full version."
+                            });
+                        }
+                        
+                        resolve(dialogues);
+                    } catch (error) {
+                        console.error('Error parsing message file:', error);
+                        reject(error);
+                    }
+                };
+                
+                reader.onerror = (error) => {
+                    reject(error);
+                };
+                
+                // Check if it's a text file by extension
+                if (file.name.toLowerCase().endsWith('.txt') || 
+                    file.name.toLowerCase().endsWith('.log') ||
+                    file.name.toLowerCase().endsWith('.csv')) {
+                    reader.readAsText(file);
+                } else {
+                    // Attempt to read as binary for .MSG files
+                    reader.readAsArrayBuffer(file);
+                }
+            });
+        };
+        
+        // NPC identification from files
+        const identifyNPCFromFiles = (files) => {
+            // Group files by potential NPC
+            const npcMap = new Map();
+            const npcList = [];
+            
+            // First, process model files
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                const filename = file.name.toLowerCase();
+                const path = file.webkitRelativePath || '';
+                
+                // Skip system files and hidden files
+                if (filename.startsWith('.') || 
+                    filename === 'thumbs.db' || 
+                    filename === 'desktop.ini') {
+                    continue;
+                }
+                
+                // Check if it's a character model file
+                if (filename.endsWith('.abc') || 
+                    filename.endsWith('.mob') || 
+                    path.includes('/characters/') || 
+                    path.includes('/npcs/')) {
+                    
+                    // Extract potential NPC name from filename or path
+                    let npcName = '';
+                    
+                    // Try to extract from path segments
+                    const pathParts = path.split('/');
+                    if (pathParts.length > 2) {
+                        // Check if we have a character name in the path
+                        for (let j = 0; j < pathParts.length; j++) {
+                            const part = pathParts[j].toLowerCase();
+                            if (part === 'characters' || part === 'npcs') {
+                                // The next segment might be a faction, and the one after a name
+                                if (j + 2 < pathParts.length) {
+                                    npcName = pathParts[j+2].replace(/\.\w+$/, '');
+                                    break;
+                                } else if (j + 1 < pathParts.length) {
+                                    npcName = pathParts[j+1].replace(/\.\w+$/, '');
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    
+                    // If we couldn't extract from path, try filename
+                    if (!npcName) {
+                        // Remove extension and clean up
+                        npcName = filename.replace(/\.\w+$/, '');
+                    }
+                    
+                    // Format NPC name nicely
+                    npcName = npcName
+                        .split(/[_\-\s]+/)
+                        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                        .join(' ');
+                    
+                    // Check if we already have this NPC
+                    if (!npcMap.has(npcName)) {
+                        const npcId = npcList.length + 1;
+                        const npc = {
+                            id: npcId,
+                            name: npcName,
+                            modelFile: path,
+                            dialogueFiles: [],
+                            faction: determineFaction(path),
+                            location: determineLocation(path),
+                            thumbnail: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+                        };
+                        
+                        npcMap.set(npcName, npc);
+                        npcList.push(npc);
+                    }
+                }
+            }
+            
+            // Next, associate dialogue files with NPCs
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                const filename = file.name.toLowerCase();
+                const path = file.webkitRelativePath || '';
+                
+                // Check if it's a potential dialogue file
+                if (filename.endsWith('.msg') || 
+                    filename.endsWith('.txt') || 
+                    path.includes('/dialogue/') || 
+                    path.includes('/speech/')) {
+                    
+                    // Try to match with an NPC
+                    for (const [npcName, npc] of npcMap.entries()) {
+                        const nameParts = npcName.toLowerCase().split(' ');
+                        
+                        // Check if the filename contains the NPC name
+                        let matches = false;
+                        for (const part of nameParts) {
+                            if (part.length > 2 && (filename.includes(part) || path.includes(part))) {
+                                matches = true;
+                                break;
+                            }
+                        }
+                        
+                        if (matches) {
+                            // Add this file to the NPC's dialogue files
+                            npc.dialogueFiles.push(file);
+                        }
+                    }
+                }
+            }
+            
+            // Create a fallback NPC for unmatched dialogue files
+            let unmatchedDialogueFiles = [];
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                const filename = file.name.toLowerCase();
+                
+                if (filename.endsWith('.msg') || filename.endsWith('.txt')) {
+                    let matched = false;
+                    
+                    for (const npc of npcList) {
+                        if (npc.dialogueFiles.includes(file)) {
+                            matched = true;
+                            break;
+                        }
+                    }
+                    
+                    if (!matched) {
+                        unmatchedDialogueFiles.push(file);
+                    }
+                }
+            }
+            
+            // Add NPCs for any unmatched dialogue files
+            if (unmatchedDialogueFiles.length > 0) {
+                for (const file of unmatchedDialogueFiles) {
+                    const filename = file.name.replace(/\.\w+$/, '');
+                    
+                    // Format NPC name nicely
+                    const npcName = filename
+                        .split(/[_\-\s]+/)
+                        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                        .join(' ');
+                    
+                    // Check if we already have this NPC
+                    if (!npcMap.has(npcName)) {
+                        const npcId = npcList.length + 1;
+                        const npc = {
+                            id: npcId,
+                            name: npcName,
+                            modelFile: '',
+                            dialogueFiles: [file],
+                            faction: 'Unknown',
+                            location: 'Unknown',
+                            thumbnail: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+                        };
+                        
+                        npcMap.set(npcName, npc);
+                        npcList.push(npc);
+                    } else {
+                        // Add this file to the existing NPC
+                        npcMap.get(npcName).dialogueFiles.push(file);
+                    }
+                }
+            }
+            
+            return npcList;
+        };
+        
+        // Helper to determine faction from file path
+        const determineFaction = (path) => {
+            path = path.toLowerCase();
+            
+            if (path.includes('agent') || path.includes('machine')) {
+                return 'Machines';
+            } else if (path.includes('zion') || path.includes('rebel')) {
+                return 'Zion';
+            } else if (path.includes('merovingian') || path.includes('exile')) {
+                return 'Exiles';
+            } else if (path.includes('civilian') || path.includes('npc')) {
+                return 'Civilian';
+            }
+            
+            return 'Unknown';
+        };
+        
+        // Helper to determine location from file path
+        const determineLocation = (path) => {
+            path = path.toLowerCase();
+            
+            if (path.includes('downtown')) {
+                return 'Downtown';
+            } else if (path.includes('richland')) {
+                return 'Richland';
+            } else if (path.includes('westview')) {
+                return 'Westview';
+            } else if (path.includes('club_hel') || path.includes('clubhel')) {
+                return 'Club Hel';
+            } else if (path.includes('zion')) {
+                return 'Zion';
+            }
+            
+            return 'Unknown';
+        };
+        
         // NPC data structure
         const NPC_DATA_STRUCTURE = {
             id: 0,
@@ -520,41 +836,110 @@
         const DialogueEditor = ({ dialogues, onSave }) => {
             const editorRef = useRef(null);
             const containerRef = useRef(null);
+            const [editorValue, setEditorValue] = useState('');
+            const [isEditorReady, setIsEditorReady] = useState(false);
             
+            // Format dialogues into text format
+            const formatDialoguesToText = (dialogueArray) => {
+                if (!dialogueArray || dialogueArray.length === 0) {
+                    return '# No dialogues found. Add new dialogues using the "Add Dialogue" button.';
+                }
+                
+                return dialogueArray.map(d => {
+                    // Get dialogue type name
+                    let typeName = 'Unknown';
+                    switch (d.dialogueType) {
+                        case 1: typeName = 'Greeting'; break;
+                        case 2: typeName = 'Conversation'; break;
+                        case 3: typeName = 'Threat'; break;
+                        case 4: typeName = 'Quest'; break;
+                        case 5: typeName = 'Information'; break;
+                        default: typeName = `Type ${d.dialogueType}`;
+                    }
+                    
+                    return `[ID:${d.id}] (Type:${d.dialogueType}) "${d.text}"\n` +
+                           `# ${typeName}\n` +
+                           `Audio: ${d.audioFile || 'None'}\n` +
+                           `Next: ${d.nextDialogueId}\n`;
+                }).join('\n\n');
+            };
+            
+            // Parse text back to dialogue objects
+            const parseTextToDialogues = (text) => {
+                const dialogueEntries = [];
+                const blocks = text.split(/\n\n+/);
+                
+                for (const block of blocks) {
+                    if (!block.trim() || block.trim().startsWith('#')) continue;
+                    
+                    const lines = block.split(/\r?\n/);
+                    let currentDialogue = null;
+                    
+                    for (let i = 0; i < lines.length; i++) {
+                        const line = lines[i].trim();
+                        
+                        // Skip empty lines and comments
+                        if (!line || line.startsWith('#')) continue;
+                        
+                        // Check for dialogue ID marker
+                        if (line.startsWith('[') && line.includes(']')) {
+                            // Extract ID and type
+                            const idMatch = line.match(/\[ID:(\d+)\]/);
+                            const typeMatch = line.match(/\(Type:(\d+)\)/);
+                            const textMatch = line.match(/"([^"]*)"/);
+                            
+                            currentDialogue = {
+                                id: idMatch ? parseInt(idMatch[1]) : dialogueEntries.length + 1,
+                                npcId: (dialogues && dialogues.length > 0) ? dialogues[0].npcId : 0,
+                                dialogueType: typeMatch ? parseInt(typeMatch[1]) : 0,
+                                nextDialogueId: -1,
+                                audioFile: '',
+                                text: textMatch ? textMatch[1] : ''
+                            };
+                            
+                            dialogueEntries.push(currentDialogue);
+                        } 
+                        // Audio file reference
+                        else if (line.startsWith('Audio:') && currentDialogue) {
+                            const audioPath = line.substring(6).trim();
+                            if (audioPath && audioPath.toLowerCase() !== 'none') {
+                                currentDialogue.audioFile = audioPath;
+                            }
+                        }
+                        // Next dialogue reference
+                        else if (line.startsWith('Next:') && currentDialogue) {
+                            const nextId = parseInt(line.substring(5).trim());
+                            currentDialogue.nextDialogueId = isNaN(nextId) ? -1 : nextId;
+                        }
+                    }
+                }
+                
+                return dialogueEntries;
+            };
+            
+            // Initialize the editor
             useEffect(() => {
                 if (!containerRef.current) return;
                 
                 // Initialize Monaco Editor
                 require.config({ paths: { 'vs': 'https://cdn.jsdelivr.net/npm/monaco-editor@0.43.0/min/vs' }});
+                
                 require(['vs/editor/editor.main'], () => {
-                    // Convert dialogues to formatted text
-                    const dialogueText = dialogues ? dialogues.map(d => 
-                        `[ID: ${d.id}] (Type: ${d.dialogueType}) "${d.text}"\n` +
-                        `Audio: ${d.audioFile}\n` +
-                        `Next: ${d.nextDialogueId}\n`
-                    ).join('\n') : '';
+                    // Format the dialogues
+                    const formattedText = formatDialoguesToText(dialogues);
+                    setEditorValue(formattedText);
                     
-                    // Create editor
+                    // Create editor if it doesn't exist
                     if (!editorRef.current) {
-                        editorRef.current = monaco.editor.create(containerRef.current, {
-                            value: dialogueText,
-                            language: 'plaintext',
-                            theme: 'vs-dark',
-                            minimap: { enabled: true },
-                            automaticLayout: true,
-                            fontSize: 14,
-                            lineNumbers: 'on',
-                            scrollBeyondLastLine: false,
-                            wordWrap: 'on'
-                        });
-                        
                         // Custom Matrix theme
                         monaco.editor.defineTheme('matrix-theme', {
                             base: 'vs-dark',
                             inherit: true,
                             rules: [
                                 { token: 'comment', foreground: '008800' },
-                                { token: 'string', foreground: '00ff00' }
+                                { token: 'string', foreground: '00ff00' },
+                                { token: 'number', foreground: '00dd00' },
+                                { token: 'keyword', foreground: '00ff44' }
                             ],
                             colors: {
                                 'editor.background': '#000800',
@@ -565,9 +950,44 @@
                             }
                         });
                         
-                        monaco.editor.setTheme('matrix-theme');
+                        // Define a simple language for dialogue files
+                        monaco.languages.register({ id: 'dialogueScript' });
+                        monaco.languages.setMonarchTokensProvider('dialogueScript', {
+                            tokenizer: {
+                                root: [
+                                    [/^#.*$/, 'comment'],
+                                    [/\[ID:\d+\]/, 'keyword'],
+                                    [/\(Type:\d+\)/, 'keyword'],
+                                    [/"[^"]*"/, 'string'],
+                                    [/Audio:.*$/, 'keyword'],
+                                    [/Next:.*$/, 'keyword'],
+                                    [/\d+/, 'number']
+                                ]
+                            }
+                        });
+                        
+                        // Create the editor
+                        editorRef.current = monaco.editor.create(containerRef.current, {
+                            value: formattedText,
+                            language: 'dialogueScript',
+                            theme: 'matrix-theme',
+                            minimap: { enabled: true },
+                            automaticLayout: true,
+                            fontSize: 14,
+                            lineNumbers: 'on',
+                            scrollBeyondLastLine: false,
+                            wordWrap: 'on'
+                        });
+                        
+                        // Set up change listener
+                        editorRef.current.onDidChangeModelContent(() => {
+                            const newValue = editorRef.current.getValue();
+                            setEditorValue(newValue);
+                        });
+                        
+                        setIsEditorReady(true);
                     } else {
-                        editorRef.current.setValue(dialogueText);
+                        editorRef.current.setValue(formattedText);
                     }
                 });
                 
@@ -575,9 +995,31 @@
                     if (editorRef.current) {
                         editorRef.current.dispose();
                         editorRef.current = null;
+                        setIsEditorReady(false);
                     }
                 };
             }, [dialogues]);
+            
+            // Save handler
+            const handleSave = () => {
+                if (isEditorReady && editorRef.current) {
+                    const currentText = editorRef.current.getValue();
+                    const parsedDialogues = parseTextToDialogues(currentText);
+                    
+                    if (parsedDialogues.length > 0) {
+                        if (onSave) {
+                            onSave(parsedDialogues);
+                        }
+                    }
+                }
+            };
+            
+            // Expose save method to parent
+            useEffect(() => {
+                if (isEditorReady && onSave) {
+                    containerRef.current.save = handleSave;
+                }
+            }, [isEditorReady, onSave]);
             
             return (
                 <div className="dialogue-editor w-full" ref={containerRef}></div>
@@ -632,16 +1074,69 @@
                             // Set the game directory
                             setGameDirectory(dirName);
                             
-                            // Simulate scanning files (in a real app, we'd analyze the files here)
-                            setTimeout(() => {
-                                // In a real implementation, we would:
-                                // 1. Scan for .msg files with dialogue
-                                // 2. Look for NPC model files (.abc, etc.)
-                                // 3. Parse the files to extract NPC data
+                            // Process the files to identify NPCs and dialogues
+                            try {
+                                // Identify NPCs from the selected files
+                                const identifiedNpcs = identifyNPCFromFiles(files);
+                                console.log(`Identified ${identifiedNpcs.length} NPCs`);
                                 
-                                // For this demo, we'll keep using mock data
+                                if (identifiedNpcs.length > 0) {
+                                    // Replace mock data with actual identified NPCs
+                                    setNpcs(identifiedNpcs);
+                                    
+                                    // Process dialogue files for each NPC
+                                    const processNpcDialogues = async () => {
+                                        const npcDialogueMap = {};
+                                        
+                                        for (const npc of identifiedNpcs) {
+                                            if (npc.dialogueFiles && npc.dialogueFiles.length > 0) {
+                                                // Process each dialogue file
+                                                try {
+                                                    const dialoguePromises = npc.dialogueFiles.map(file => parseMessageFile(file));
+                                                    const dialogueResults = await Promise.all(dialoguePromises);
+                                                    
+                                                    // Combine all dialogues for this NPC
+                                                    const allDialogues = dialogueResults.flat();
+                                                    
+                                                    // Assign NPC ID to each dialogue entry
+                                                    allDialogues.forEach(dialogue => {
+                                                        dialogue.npcId = npc.id;
+                                                    });
+                                                    
+                                                    // Store in the map
+                                                    npcDialogueMap[npc.name] = allDialogues;
+                                                } catch (error) {
+                                                    console.error(`Error processing dialogues for NPC ${npc.name}:`, error);
+                                                }
+                                            }
+                                        }
+                                        
+                                        // Use the identified dialogues
+                                        if (Object.keys(npcDialogueMap).length > 0) {
+                                            setDialogues([]); // Clear any current dialogues
+                                            console.log('Parsed dialogue map:', npcDialogueMap);
+                                            
+                                            // Store the dialogue map for lookup
+                                            window.npcDialogueData = npcDialogueMap;
+                                        } else {
+                                            // If we couldn't parse any real dialogues, use the mock data
+                                            window.npcDialogueData = MOCK_DIALOGUES;
+                                        }
+                                        
+                                        setIsLoading(false);
+                                    };
+                                    
+                                    // Start processing dialogues
+                                    processNpcDialogues();
+                                } else {
+                                    // If we couldn't identify any NPCs, fall back to mock data
+                                    console.log('No NPCs identified, using mock data');
+                                    setIsLoading(false);
+                                }
+                            } catch (error) {
+                                console.error('Error processing files:', error);
                                 setIsLoading(false);
-                            }, 1000);
+                            }
                         } else {
                             // No files selected
                             setIsLoading(false);
@@ -673,15 +1168,67 @@
             
             const handleSelectNpc = (npc) => {
                 setSelectedNpc(npc);
-                // Load dialogues for this NPC
-                setDialogues(MOCK_DIALOGUES[npc.name] || []);
+                
+                // Load dialogues for this NPC from the parsed data or fallback to mock data
+                if (window.npcDialogueData && window.npcDialogueData[npc.name]) {
+                    setDialogues(window.npcDialogueData[npc.name]);
+                } else if (MOCK_DIALOGUES[npc.name]) {
+                    setDialogues(MOCK_DIALOGUES[npc.name]);
+                } else {
+                    // If no dialogues found, create a placeholder
+                    setDialogues([{
+                        id: 1,
+                        npcId: npc.id,
+                        dialogueType: 1,
+                        nextDialogueId: -1,
+                        audioFile: '',
+                        text: `No dialogue found for ${npc.name}. Click 'Add Dialogue' to create new entries.`
+                    }]);
+                }
             };
             
             const handleSaveDialogues = (updatedDialogues) => {
                 // In a real implementation, this would save the dialogues back to the game files
                 console.log('Saving dialogues:', updatedDialogues);
-                // Update the mock data for this demo
+                
+                // Update the displayed dialogues
                 setDialogues(updatedDialogues);
+                
+                // Update the global dialogue map
+                if (window.npcDialogueData && selectedNpc) {
+                    window.npcDialogueData[selectedNpc.name] = updatedDialogues;
+                }
+                
+                // In a real app, this would write back to the file
+                alert(`Saved ${updatedDialogues.length} dialogue entries for ${selectedNpc?.name || 'NPC'}`);
+            };
+            
+            // Handle adding a new dialogue entry
+            const handleAddDialogue = () => {
+                if (!selectedNpc) return;
+                
+                // Create a new dialogue entry
+                const newId = dialogues.length > 0 
+                    ? Math.max(...dialogues.map(d => d.id)) + 1 
+                    : 1;
+                
+                const newDialogue = {
+                    id: newId,
+                    npcId: selectedNpc.id,
+                    dialogueType: 1, // Default to greeting
+                    nextDialogueId: -1,
+                    audioFile: '',
+                    text: 'New dialogue entry'
+                };
+                
+                // Add to current dialogues
+                const updatedDialogues = [...dialogues, newDialogue];
+                setDialogues(updatedDialogues);
+                
+                // Update global map
+                if (window.npcDialogueData && selectedNpc) {
+                    window.npcDialogueData[selectedNpc.name] = updatedDialogues;
+                }
             };
             
             const filteredNpcs = npcs.filter(npc => 
@@ -774,9 +1321,32 @@
                                     />
                                     
                                     <div className="flex justify-between mt-2">
-                                        <button className="matrix-button">Add Dialogue</button>
-                                        <button className="matrix-button">Save Changes</button>
-                                        <button className="matrix-button">Test In-Game</button>
+                                        <button 
+                                            className="matrix-button"
+                                            onClick={handleAddDialogue}
+                                        >
+                                            Add Dialogue
+                                        </button>
+                                        <button 
+                                            className="matrix-button"
+                                            onClick={() => {
+                                                // Call the editor's save method
+                                                const editorContainer = document.querySelector('.dialogue-editor');
+                                                if (editorContainer && editorContainer.save) {
+                                                    editorContainer.save();
+                                                } else {
+                                                    handleSaveDialogues(dialogues);
+                                                }
+                                            }}
+                                        >
+                                            Save Changes
+                                        </button>
+                                        <button 
+                                            className="matrix-button"
+                                            onClick={() => alert('In a full implementation, this would launch the game with the current NPC loaded for testing.')}
+                                        >
+                                            Test In-Game
+                                        </button>
                                     </div>
                                 </>
                             ) : (
