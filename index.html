@@ -303,6 +303,69 @@
                 });
             },
             
+            // MOB Model Parser (Matrix Online Binary)
+            parseMOB: async (file) => {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        try {
+                            const buffer = e.target.result;
+                            
+                            // In a real implementation, we would check for MOB-specific header
+                            // For this demo, we'll log the first few bytes to help identify the format
+                            const header = new Uint8Array(buffer, 0, 8);
+                            console.log('MOB file header bytes:', Array.from(header).map(b => b.toString(16).padStart(2, '0')).join(' '));
+                            
+                            // Generate placeholder model (pyramid shape to differentiate from ABC cube)
+                            resolve({
+                                type: 'model',
+                                vertices: [
+                                    // Simple pyramid vertices
+                                    -1, -1, -1,  // Base vertex 0
+                                    1, -1, -1,   // Base vertex 1
+                                    1, -1, 1,    // Base vertex 2
+                                    -1, -1, 1,   // Base vertex 3
+                                    0, 1, 0      // Top vertex 4
+                                ],
+                                indices: [
+                                    // Base (two triangles)
+                                    0, 2, 1,
+                                    0, 3, 2,
+                                    // Four sides
+                                    0, 1, 4,
+                                    1, 2, 4,
+                                    2, 3, 4,
+                                    3, 0, 4
+                                ],
+                                uvs: [
+                                    // UVs for each vertex
+                                    0, 0,
+                                    1, 0,
+                                    1, 1,
+                                    0, 1,
+                                    0.5, 0.5
+                                ],
+                                normals: [],  // We'll compute these in the model viewer
+                                animations: [],
+                                materials: [],
+                                metadata: {
+                                    format: 'MOB',
+                                    version: 1.0,
+                                    vertexCount: 5,
+                                    triangleCount: 6,
+                                    description: 'Matrix Online Binary model'
+                                }
+                            });
+                        } catch (error) {
+                            console.error('Error parsing MOB file:', error);
+                            reject(error);
+                        }
+                    };
+                    reader.onerror = reject;
+                    reader.readAsArrayBuffer(file);
+                });
+            },
+            
             // DTX Texture Parser (simplified)
             parseDTX: async (file) => {
                 return new Promise((resolve, reject) => {
@@ -738,10 +801,18 @@
                 rendererRef.current = renderer;
                 
                 // Add controls
-                const controls = new THREE.OrbitControls(camera, renderer.domElement);
-                controls.enableDamping = true;
-                controls.dampingFactor = 0.25;
-                controlsRef.current = controls;
+                // Make sure THREE.OrbitControls is available
+                if (THREE.OrbitControls) {
+                    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+                    controls.enableDamping = true;
+                    controls.dampingFactor = 0.25;
+                    controlsRef.current = controls;
+                } else {
+                    console.warn("THREE.OrbitControls is not available. Model rotation will be limited.");
+                    // Fallback camera position since we can't orbit
+                    camera.position.set(0, 0, 5);
+                    camera.lookAt(0, 0, 0);
+                }
                 
                 // Add lighting
                 const ambientLight = new THREE.AmbientLight(0x404040);
@@ -1750,6 +1821,12 @@
                 
                 const video = videoRef.current;
                 
+                // Ensure video is properly loaded
+                if (data && data.url) {
+                    video.src = data.url;
+                    video.load();
+                }
+                
                 // Get video metadata when loaded
                 video.onloadedmetadata = () => {
                     setDuration(video.duration);
@@ -1777,7 +1854,7 @@
                     video.ontimeupdate = null;
                     video.onended = null;
                 };
-            }, [videoRef, file]);
+            }, [videoRef, file, data]);
             
             const togglePlay = () => {
                 if (videoRef.current) {
@@ -1818,13 +1895,13 @@
                         <div className="relative w-full max-w-[800px]" style={{ backgroundColor: '#000', aspectRatio: '16/9' }}>
                             <video
                                 ref={videoRef}
-                                src={data ? data.url : ''}
                                 style={{ 
                                     width: '100%',
                                     height: '100%',
                                     objectFit: 'contain'
                                 }}
                                 onClick={togglePlay}
+                                controls={false}
                             ></video>
                             
                             {!isPlaying && (
@@ -2784,7 +2861,13 @@
                         try {
                             // For 3D models, parse and prepare for display
                             console.log(`Processing 3D model: ${fileName}`);
-                            parsedData = await LithtechParsers.parseABC(fileInfo.file);
+                            
+                            // Use specific parser based on file extension
+                            if (fileExt === '.mob') {
+                                parsedData = await LithtechParsers.parseMOB(fileInfo.file);
+                            } else {
+                                parsedData = await LithtechParsers.parseABC(fileInfo.file);
+                            }
                             
                             // If this is coming from the models tab, automatically focus the 3D view
                             if (activeView === 'models') {
