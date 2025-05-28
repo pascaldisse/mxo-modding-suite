@@ -9,13 +9,28 @@
     <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.23.5/babel.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.153.0/build/three.min.js"></script>
-    <script>
-        // Ensure THREE is available globally
-        window.THREE = THREE;
+    
+    <!-- Three.js ES Modules -->
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+      }
     </script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.153.0/examples/js/controls/OrbitControls.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.153.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        
+        // Make THREE globally available
+        window.THREE = THREE;
+        window.OrbitControls = OrbitControls;
+        window.GLTFLoader = GLTFLoader;
+    </script>
+    
+    <!-- Tailwind CSS (Note: For production, use the CLI or PostCSS plugin instead) -->
     <script src="https://cdn.tailwindcss.com"></script>
     
     <!-- Monaco Editor -->
@@ -331,7 +346,7 @@
                     dialogueType: 1, // Greeting
                     nextDialogueId: 102,
                     audioFile: 'audio/agent_smith/greeting01.wav',
-                    text: 'Mr. Anderson. We've been expecting you.'
+                    text: "Mr. Anderson. We've been expecting you."
                 },
                 {
                     id: 102,
@@ -339,7 +354,7 @@
                     dialogueType: 2, // Conversation
                     nextDialogueId: 103,
                     audioFile: 'audio/agent_smith/convo01.wav',
-                    text: 'It seems that you've been living two lives, Mr. Anderson.'
+                    text: "It seems that you've been living two lives, Mr. Anderson."
                 },
                 {
                     id: 103,
@@ -373,7 +388,7 @@
                     dialogueType: 4, // Quest
                     nextDialogueId: -1,
                     audioFile: 'audio/morpheus/quest01.wav',
-                    text: 'I'm trying to free your mind, Neo. But I can only show you the door. You're the one that has to walk through it.'
+                    text: "I'm trying to free your mind, Neo. But I can only show you the door. You're the one that has to walk through it."
                 }
             ]
         };
@@ -413,7 +428,7 @@
                 containerRef.current.appendChild(renderer.domElement);
                 
                 // Add controls
-                const controls = new THREE.OrbitControls(camera, renderer.domElement);
+                const controls = new OrbitControls(camera, renderer.domElement);
                 controls.enableDamping = true;
                 controls.dampingFactor = 0.05;
                 
